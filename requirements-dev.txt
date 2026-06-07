@@ -1,0 +1,5 @@
+# Dev/test dependencies. Installed on top of requirements.txt for local work and CI.
+-r requirements.txt
+pytest>=8.0
+pytest-django>=4.8
+ruff>=0.6

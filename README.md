@@ -21,7 +21,7 @@ Part of [hector-garza.com](https://hector-garza.com)'s portfolio. This repo is o
 
 ## Deployment
 - **Live demo:** Dockerized Django app on **Render**, fronted by **Cloudflare** (planned subdomain `spc.hector-garza.com`).
-- Local run: one command via Docker (added in build step M0).
+- Local run: `make run` (or `docker compose up --build`) → serves at `http://localhost:8000`.
 
 ## Links (filled in as the build progresses)
 - 🔗 Live demo: _TBD_

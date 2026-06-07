@@ -1,0 +1,7 @@
+# Runtime dependencies. Pinned to major ranges; the SPC engine (M1–M3) needs
+# the scientific stack, so it's installed now to keep the Docker image stable.
+Django>=5.0,<6.0
+channels[daphne]>=4.0,<5.0
+numpy>=2.0,<3.0
+pandas>=2.2,<3.0
+scipy>=1.13,<2.0

@@ -1,0 +1,12 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_DEBUG: "1"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
+    # Mount the source for live editing during development. The image already
+    # COPYs the code, so this only matters locally.
+    volumes:
+      - .:/app
