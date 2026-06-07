@@ -2,6 +2,8 @@
 
 A live statistical-process-control dashboard that predicts when a process will drift out of spec **before** it does — built so a 2 a.m. operator will actually trust and act on the alert.
 
+**▶ Live demo: <https://spc.hector-garza.com/>** — click *Inject → Slow drift ↓* and watch it forecast the breach.
+
 > **Illustrative tool on synthetic data — not affiliated with any employer.**
 
 ![SPC Sentinel dashboard — three live control charts with an injected downward drift on bath concentration breaching the lower control limit, and a plain-English alarm.](docs/dashboard.png)
@@ -75,7 +77,7 @@ Dockerized; honors `$PORT` and runs as a non-root user. A [`render.yaml`](./rend
 - WebSocket: the client auto-selects `wss://` under HTTPS; `SECURE_PROXY_SSL_HEADER` is set so Django trusts the proxy's forwarded-proto.
 
 ## Links
-- 🔗 Live demo: _TBD (deploy via `render.yaml`)_
+- 🔗 Live demo: <https://spc.hector-garza.com/> (Dockerized Django on Render, fronted by Cloudflare)
 - 🧠 Decision record: [`DECISIONS.md`](./DECISIONS.md) — the four questions, the rejected option, the accepted risk
 - 🎥 Whiteboard walkthrough: _TBD (recording guide: [`WHITEBOARD-SCRIPT.md`](./WHITEBOARD-SCRIPT.md))_
 
