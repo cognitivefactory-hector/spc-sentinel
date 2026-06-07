@@ -6,12 +6,12 @@ demo be replayed identically. Noise is drawn for every signal on every step so t
 RNG sequence — and therefore reproducibility — is independent of which disturbances
 are injected.
 
-Injection model (offsets added on top of the quiet signal), all expiring after
-`duration` samples so the stream self-heals (or call reset()):
+Injection model (offsets added on top of the quiet signal):
   - spike: a one-sample bump of `magnitude`.
-  - step:  a sustained shift of `magnitude` held for `duration` samples.
-  - drift: a linear ramp reaching `magnitude` total over `duration` samples
-           (slope = magnitude / duration per sample).
+  - step:  a transient shift of `magnitude` held for `duration` samples, then heals.
+  - drift: a linear ramp reaching `magnitude` over `duration` samples
+           (slope = magnitude / duration per sample), then HELD — a real drift
+           persists until corrected. Call reset() to clear all injections.
 
 NO employer data — baselines are deliberately round, obviously synthetic numbers.
 """
@@ -64,11 +64,13 @@ class Injection:
             return 0.0
         if self.kind == "spike":
             return self.magnitude if elapsed == 0 else 0.0
-        if elapsed >= self.duration:
-            return 0.0
         if self.kind == "step":
+            # A transient shift: held for `duration` samples, then it self-heals.
+            return self.magnitude if elapsed < self.duration else 0.0
+        # drift: ramp to `magnitude` over `duration`, then HOLD — a real process
+        # drift persists until someone corrects it (or the stream is reset).
+        if elapsed >= self.duration:
             return self.magnitude
-        # drift
         return self.magnitude * elapsed / self.duration
 
 
