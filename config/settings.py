@@ -23,6 +23,10 @@ CSRF_TRUSTED_ORIGINS = [
     o for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o
 ]
 
+# Behind Render/Cloudflare TLS termination: trust the forwarded-proto header so
+# Django treats proxied requests as HTTPS (and the client uses wss for the socket).
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 INSTALLED_APPS = [
     "daphne",  # must precede staticfiles so its runserver override wins
     "channels",
