@@ -76,8 +76,8 @@ Dockerized; honors `$PORT` and runs as a non-root user. A [`render.yaml`](./rend
 
 ## Links
 - 🔗 Live demo: _TBD (deploy via `render.yaml`)_
-- 🧠 Decision record: [`DECISIONS.md`](./DECISIONS.md)
-- 🎥 Whiteboard walkthrough: _TBD_
+- 🧠 Decision record: [`DECISIONS.md`](./DECISIONS.md) — the four questions, the rejected option, the accepted risk
+- 🎥 Whiteboard walkthrough: _TBD (recording guide: [`WHITEBOARD-SCRIPT.md`](./WHITEBOARD-SCRIPT.md))_
 
 ## Build
 See [`PLAN.md`](./PLAN.md) — milestones M0 (scaffold) → M7 (decision record + whiteboard).
