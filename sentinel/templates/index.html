@@ -3,38 +3,694 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SPC Sentinel</title>
+    <title>SPC Sentinel — live drift monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
     <style>
-      :root { color-scheme: light dark; }
+      :root {
+        --bg: #0a0c10;
+        --panel: #11151c;
+        --panel-2: #0e1218;
+        --line: #1d242e;
+        --line-bright: #2b3543;
+        --ink: #dfe6ee;
+        --ink-dim: #8893a2;
+        --ink-faint: #5b6573;
+        --teal: #46d6c8;
+        --blue: #7aa2f7;
+        --green: #9ece6a;
+        --amber: #e0af4b;
+        --red: #f0635c;
+        --alarm-glow: rgba(240, 99, 92, 0.18);
+        --warn-glow: rgba(224, 175, 75, 0.16);
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body { height: 100%; }
+
       body {
-        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
         margin: 0;
-        min-height: 100vh;
+        background-color: var(--bg);
+        background-image:
+          linear-gradient(rgba(70, 214, 200, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(70, 214, 200, 0.025) 1px, transparent 1px);
+        background-size: 32px 32px;
+        color: var(--ink);
+        font-family: "IBM Plex Sans", sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
         display: flex;
         flex-direction: column;
+        min-height: 100vh;
       }
-      main { flex: 1; display: grid; place-items: center; text-align: center; padding: 2rem; }
-      h1 { margin: 0 0 0.5rem; font-size: 1.75rem; }
-      p.tagline { margin: 0; max-width: 40ch; opacity: 0.8; }
+
+      .mono { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+
+      /* ---- top bar ---- */
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.9rem 1.4rem;
+        border-bottom: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent);
+      }
+      .brand { display: flex; align-items: baseline; gap: 0.85rem; }
+      .wordmark {
+        font-family: "Archivo", sans-serif;
+        font-weight: 900;
+        font-size: 1.32rem;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        margin: 0;
+        color: var(--ink);
+      }
+      .wordmark .accent { color: var(--teal); }
+      .tagline {
+        color: var(--ink-faint);
+        font-size: 0.72rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+      .status-cluster { display: flex; align-items: center; gap: 1.4rem; }
+      .stat { text-align: right; }
+      .stat .k {
+        display: block;
+        font-size: 0.6rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+      }
+      .stat .v { font-size: 0.95rem; color: var(--ink); }
+      .live {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.7rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--ink-dim);
+      }
+      .led {
+        width: 9px; height: 9px; border-radius: 50%;
+        background: var(--ink-faint);
+        box-shadow: 0 0 0 0 rgba(70, 214, 200, 0.6);
+      }
+      .led.on { background: var(--teal); animation: pulse 1.8s infinite; }
+      .led.alarm { background: var(--red); animation: pulse-r 1s infinite; }
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(70, 214, 200, 0.5); }
+        70% { box-shadow: 0 0 0 7px rgba(70, 214, 200, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(70, 214, 200, 0); }
+      }
+      @keyframes pulse-r {
+        0% { box-shadow: 0 0 0 0 rgba(240, 99, 92, 0.6); }
+        70% { box-shadow: 0 0 0 8px rgba(240, 99, 92, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(240, 99, 92, 0); }
+      }
+
+      /* ---- alert banner ---- */
+      .banner {
+        margin: 1rem 1.4rem 0;
+        padding: 0.85rem 1.1rem;
+        border: 1px solid var(--line-bright);
+        border-left-width: 3px;
+        border-radius: 3px;
+        background: var(--panel-2);
+        display: flex;
+        align-items: center;
+        gap: 0.9rem;
+        transition: border-color 0.3s, background 0.3s;
+      }
+      .banner .tag {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.66rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        padding: 0.2rem 0.5rem;
+        border: 1px solid currentColor;
+        border-radius: 2px;
+        flex: none;
+      }
+      .banner .msg { color: var(--ink); }
+      .banner.ok { border-left-color: var(--teal); color: var(--teal); }
+      .banner.warning { border-left-color: var(--amber); color: var(--amber); background: var(--warn-glow); }
+      .banner.alarm { border-left-color: var(--red); color: var(--red); background: var(--alarm-glow); }
+
+      /* ---- layout ---- */
+      .layout {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: 1rem;
+        padding: 1rem 1.4rem;
+      }
+      .charts { display: flex; flex-direction: column; gap: 1rem; }
+      .sidebar { display: flex; flex-direction: column; gap: 1rem; }
+
+      /* ---- panels with calibration corner ticks ---- */
+      .panel {
+        position: relative;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        padding: 0.9rem 1rem;
+      }
+      .panel::before, .panel::after {
+        content: "";
+        position: absolute;
+        width: 8px; height: 8px;
+        border-color: var(--line-bright);
+        border-style: solid;
+        pointer-events: none;
+      }
+      .panel::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+      .panel::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+
+      .chart-panel.alarm { border-color: rgba(240, 99, 92, 0.55); }
+      .chart-panel.warning { border-color: rgba(224, 175, 75, 0.5); }
+
+      .chart-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 0.4rem;
+      }
+      .chart-title {
+        font-family: "Archivo", sans-serif;
+        font-weight: 700;
+        font-size: 0.82rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink);
+      }
+      .chart-title .unit { color: var(--ink-faint); font-weight: 500; letter-spacing: 0.06em; text-transform: none; }
+      .chart-readout { display: flex; align-items: baseline; gap: 0.7rem; }
+      .chart-value { font-family: "IBM Plex Mono", monospace; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+      .ttb {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.7rem;
+        color: var(--amber);
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .ttb.show { opacity: 1; }
+      .sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); flex: none; align-self: center; }
+      .sdot.warning { background: var(--amber); }
+      .sdot.alarm { background: var(--red); }
+      .plot { width: 100%; height: 180px; }
+
+      /* ---- controls ---- */
+      .panel h2 {
+        font-family: "Archivo", sans-serif;
+        font-weight: 700;
+        font-size: 0.74rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-dim);
+        margin: 0 0 0.85rem;
+      }
+      .field { margin-bottom: 0.7rem; }
+      .field label {
+        display: block;
+        font-size: 0.62rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin-bottom: 0.25rem;
+      }
+      select, input {
+        width: 100%;
+        background: var(--panel-2);
+        border: 1px solid var(--line-bright);
+        border-radius: 2px;
+        color: var(--ink);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.85rem;
+        padding: 0.45rem 0.55rem;
+      }
+      select:focus, input:focus { outline: none; border-color: var(--teal); }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+      button {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        cursor: pointer;
+        border-radius: 2px;
+        border: 1px solid var(--line-bright);
+        background: var(--panel-2);
+        color: var(--ink);
+        padding: 0.55rem 0.7rem;
+        transition: border-color 0.15s, color 0.15s, background 0.15s;
+      }
+      button:hover { border-color: var(--teal); color: var(--teal); }
+      button:active { transform: translateY(1px); }
+      .btn-primary {
+        width: 100%;
+        margin-top: 0.4rem;
+        border-color: var(--teal);
+        color: var(--teal);
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+      }
+      .btn-primary:hover { background: rgba(70, 214, 200, 0.1); }
+      .btn-reset { width: 100%; margin-top: 0.55rem; }
+      .btn-reset:hover { border-color: var(--red); color: var(--red); }
+      .presets { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.4rem; }
+      .presets button { flex: 1 1 auto; font-size: 0.66rem; padding: 0.4rem 0.4rem; }
+
+      /* ---- alert log ---- */
+      .log-panel { flex: 1; display: flex; flex-direction: column; min-height: 200px; }
+      .log { overflow-y: auto; flex: 1; max-height: 340px; margin: -0.2rem -0.3rem; padding: 0 0.3rem; }
+      .log-empty { color: var(--ink-faint); font-size: 0.78rem; font-style: italic; padding: 0.4rem 0; }
+      .log-item {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.5rem 0.7rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--line);
+        animation: slidein 0.3s ease;
+      }
+      @keyframes slidein { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+      .log-item .when { font-family: "IBM Plex Mono", monospace; font-size: 0.66rem; color: var(--ink-faint); white-space: nowrap; }
+      .log-item .body { font-size: 0.78rem; color: var(--ink); }
+      .log-item .sev {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.58rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        padding: 0.05rem 0.35rem;
+        border: 1px solid currentColor;
+        border-radius: 2px;
+        margin-right: 0.4rem;
+      }
+      .sev.alarm, .log-item.alarm .sev { color: var(--red); }
+      .sev.warning, .log-item.warning .sev { color: var(--amber); }
+
+      /* ---- footer ---- */
       footer {
-        padding: 1rem;
-        text-align: center;
-        font-size: 0.8rem;
-        opacity: 0.6;
-        border-top: 1px solid rgba(128, 128, 128, 0.3);
+        padding: 0.85rem 1.4rem;
+        border-top: 1px solid var(--line);
+        color: var(--ink-faint);
+        font-size: 0.72rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      footer a { color: var(--ink-dim); text-decoration: none; border-bottom: 1px solid var(--line-bright); }
+      footer a:hover { color: var(--teal); }
+
+      .toast {
+        position: fixed;
+        bottom: 1.4rem; left: 50%;
+        transform: translateX(-50%) translateY(20px);
+        background: var(--panel);
+        border: 1px solid var(--teal);
+        color: var(--teal);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.78rem;
+        padding: 0.55rem 1rem;
+        border-radius: 3px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s, transform 0.25s;
+        z-index: 20;
+      }
+      .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+      @media (max-width: 920px) {
+        .layout { grid-template-columns: 1fr; }
+        .status-cluster { gap: 0.9rem; }
+        .topbar { flex-wrap: wrap; }
       }
     </style>
   </head>
   <body>
-    <main>
-      <div>
-        <h1>SPC Sentinel</h1>
-        <p class="tagline">
-          Live statistical-process-control dashboard — scaffold running (M0).
-          Charts, alerts, and inject controls land in M5.
-        </p>
+    <header class="topbar">
+      <div class="brand">
+        <h1 class="wordmark">SPC&nbsp;<span class="accent">Sentinel</span></h1>
+        <span class="tagline">Predictive Drift Monitor</span>
       </div>
+      <div class="status-cluster">
+        <span class="live"><span class="led" id="led"></span><span id="conn">connecting</span></span>
+        <div class="stat"><span class="k">Sample</span><span class="v mono" id="stat-t">—</span></div>
+        <div class="stat"><span class="k">Rate</span><span class="v mono" id="stat-rate">—</span></div>
+      </div>
+    </header>
+
+    <div class="banner ok" id="banner">
+      <span class="tag">STATUS</span>
+      <span class="msg" id="banner-msg">Connecting to telemetry stream…</span>
+    </div>
+
+    <main class="layout">
+      <section class="charts" id="charts"></section>
+
+      <aside class="sidebar">
+        <div class="panel">
+          <h2>Inject Disturbance</h2>
+          <div class="presets" id="presets"></div>
+          <div class="field">
+            <label for="f-signal">Signal</label>
+            <select id="f-signal"></select>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="f-kind">Kind</label>
+              <select id="f-kind">
+                <option value="drift">Drift (ramp)</option>
+                <option value="step">Step (shift)</option>
+                <option value="spike">Spike</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-mag">Magnitude</label>
+              <input id="f-mag" class="mono" type="number" step="0.5" value="-6" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="f-dur">Duration (samples)</label>
+            <input id="f-dur" class="mono" type="number" min="1" value="120" />
+          </div>
+          <button class="btn-primary" id="btn-inject">▸ Inject</button>
+          <button class="btn-reset" id="btn-reset">⟲ Reset stream</button>
+        </div>
+
+        <div class="panel log-panel">
+          <h2>Alert Log</h2>
+          <div class="log" id="log"><div class="log-empty">No alerts yet — all signals in control.</div></div>
+        </div>
+      </aside>
     </main>
-    <footer>Simulated data; not affiliated with any employer.</footer>
+
+    <footer>
+      <span>Simulated data; not affiliated with any employer.</span>
+      <span>SPC Sentinel — rules: Western Electric / Nelson · forecast: rolling-trend time-to-breach</span>
+    </footer>
+
+    <div class="toast" id="toast"></div>
+
+    {% verbatim %}
+    <script>
+      const MAXPTS = 120;
+      const ACCENTS = ["#46d6c8", "#7aa2f7", "#9ece6a", "#e0af4b"];
+      const charts = {};         // signal -> { div, drawn, unit, accent, xs, ys, lim, lastVal }
+      const latestAlertMsg = {}; // signal -> { sev, msg, at } latest rich alert text
+      const SEV_RANK = { ok: 0, warning: 1, alarm: 2 };
+
+      const $ = (id) => document.getElementById(id);
+      const fmt = (v, d = 2) => (v === null || v === undefined ? "—" : Number(v).toFixed(d));
+
+      function showToast(text, color) {
+        const t = $("toast");
+        t.textContent = text;
+        t.style.borderColor = color || "var(--teal)";
+        t.style.color = color || "var(--teal)";
+        t.classList.add("show");
+        clearTimeout(t._timer);
+        t._timer = setTimeout(() => t.classList.remove("show"), 2200);
+      }
+
+      const plotLayout = (accent) => ({
+        paper_bgcolor: "transparent",
+        plot_bgcolor: "transparent",
+        margin: { l: 46, r: 12, t: 6, b: 22 },
+        font: { family: "IBM Plex Mono, monospace", size: 10, color: "#8893a2" },
+        xaxis: { showgrid: false, zeroline: false, color: "#5b6573", tickfont: { size: 9 } },
+        yaxis: { gridcolor: "#1d242e", zeroline: false, color: "#8893a2", tickfont: { size: 9 } },
+        showlegend: false,
+        shapes: [],
+      });
+
+      function buildCharts(signals) {
+        const container = $("charts");
+        const sigSelect = $("f-signal");
+        container.innerHTML = "";
+        sigSelect.innerHTML = "";
+        signals.forEach((s, i) => {
+          const accent = ACCENTS[i % ACCENTS.length];
+          const panel = document.createElement("div");
+          panel.className = "panel chart-panel";
+          panel.id = "panel-" + s.name;
+          panel.innerHTML = `
+            <div class="chart-head">
+              <div class="chart-title">${s.name} <span class="unit">${s.unit}</span></div>
+              <div class="chart-readout">
+                <span class="ttb" id="ttb-${s.name}"></span>
+                <span class="chart-value" id="val-${s.name}">—</span>
+                <span class="sdot" id="dot-${s.name}"></span>
+              </div>
+            </div>
+            <div class="plot" id="plot-${s.name}"></div>`;
+          container.appendChild(panel);
+
+          const div = $("plot-" + s.name);
+          Plotly.newPlot(
+            div,
+            [{ x: [], y: [], mode: "lines", line: { color: accent, width: 1.8, shape: "spline" }, hoverinfo: "skip" }],
+            plotLayout(accent),
+            { displayModeBar: false, responsive: true, staticPlot: false }
+          );
+          charts[s.name] = { div, drawn: false, unit: s.unit, accent, xs: [], ys: [], lim: null, appliedRange: null };
+
+          const opt = document.createElement("option");
+          opt.value = s.name;
+          opt.textContent = `${s.name} (${s.unit})`;
+          sigSelect.appendChild(opt);
+        });
+      }
+
+      // Keep the control limits always visible while auto-fitting the data, so an
+      // injected drift that pushes past a limit stays on-screen instead of clipping.
+      function adjustRange(c) {
+        if (!c.ys.length) return;
+        let lo = Math.min(...c.ys), hi = Math.max(...c.ys);
+        if (c.lim) { lo = Math.min(lo, c.lim.lcl); hi = Math.max(hi, c.lim.ucl); }
+        const span = Math.max(hi - lo, 1e-6);
+        const next = [lo - span * 0.1, hi + span * 0.1];
+        const prev = c.appliedRange;
+        if (!prev || Math.abs(prev[0] - next[0]) > span * 0.02 || Math.abs(prev[1] - next[1]) > span * 0.02) {
+          c.appliedRange = next;
+          Plotly.relayout(c.div, { "yaxis.range": next });
+        }
+      }
+
+      function drawLimits(name, lim) {
+        const c = charts[name];
+        if (!c) return;
+        c.lim = lim;
+        if (c.drawn) return;
+        const band = (y0, y1, color) => ({
+          type: "rect", xref: "paper", x0: 0, x1: 1, yref: "y", y0, y1,
+          fillcolor: color, line: { width: 0 }, layer: "below",
+        });
+        const hline = (y, color, dash) => ({
+          type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: y, y1: y,
+          line: { color, width: 1, dash: dash || "solid" },
+        });
+        const s1u = lim.centerline + lim.sigma, s1l = lim.centerline - lim.sigma;
+        const s2u = lim.centerline + 2 * lim.sigma, s2l = lim.centerline - 2 * lim.sigma;
+        Plotly.relayout(c.div, {
+          shapes: [
+            band(s1l, s1u, "rgba(70,214,200,0.06)"),
+            hline(lim.centerline, "rgba(223,230,238,0.35)", "dot"),
+            hline(s2u, "rgba(224,175,75,0.55)", "dash"),
+            hline(s2l, "rgba(224,175,75,0.55)", "dash"),
+            hline(lim.ucl, "rgba(240,99,92,0.8)"),
+            hline(lim.lcl, "rgba(240,99,92,0.8)"),
+          ],
+        });
+        c.drawn = true;
+      }
+
+      function setSignalState(name, sev) {
+        const dot = $("dot-" + name);
+        const panel = $("panel-" + name);
+        if (dot) dot.className = "sdot " + (sev || "");
+        if (panel) panel.className = "panel chart-panel " + (sev === "ok" ? "" : sev || "");
+      }
+
+      function setBanner(sev, msg) {
+        const b = $("banner");
+        b.className = "banner " + sev;
+        b.querySelector(".tag").textContent = sev === "ok" ? "IN CONTROL" : sev.toUpperCase();
+        $("banner-msg").textContent = msg;
+        $("led").className = "led " + (sev === "alarm" ? "alarm" : "on");
+      }
+
+      function pushLog(alert) {
+        const log = $("log");
+        const empty = log.querySelector(".log-empty");
+        if (empty) empty.remove();
+        const now = new Date().toLocaleTimeString("en-GB");
+        const item = document.createElement("div");
+        item.className = "log-item " + alert.severity;
+        const tag = alert.kind === "forecast" ? "FORECAST" : (alert.rule || "RULE");
+        item.innerHTML = `<span class="when">${now}</span>
+          <span class="body"><span class="sev ${alert.severity}">${alert.severity}</span>${alert.message}</span>`;
+        log.insertBefore(item, log.firstChild);
+        while (log.children.length > 60) log.removeChild(log.lastChild);
+      }
+
+      // Current status derived from the live value vs. its control limits — so the
+      // banner and chart dots always reflect reality, never a stale alert message.
+      function deriveStatus(value, lim) {
+        if (!lim) return "ok";
+        if (value > lim.ucl || value < lim.lcl) return "alarm";
+        if (value > lim.centerline + 2 * lim.sigma || value < lim.centerline - 2 * lim.sigma) return "warning";
+        return "ok";
+      }
+
+      function handleMessage(p) {
+        $("stat-t").textContent = p.t;
+
+        // Per-signal value + chart update.
+        for (const [name, value] of Object.entries(p.samples || {})) {
+          const c = charts[name];
+          if (!c) continue;
+          c.lastVal = value;
+          $("val-" + name).textContent = fmt(value, 2);
+          c.xs.push(p.t);
+          c.ys.push(value);
+          if (c.ys.length > MAXPTS) { c.xs.shift(); c.ys.shift(); }
+          Plotly.extendTraces(c.div, { x: [[p.t]], y: [[value]] }, [0], MAXPTS);
+          if (p.limits && p.limits[name]) drawLimits(name, p.limits[name]);
+          adjustRange(c);
+        }
+
+        // Log alerts (rich plain-English text) and remember the latest per signal.
+        for (const a of p.alerts || []) {
+          pushLog(a);
+          latestAlertMsg[a.signal] = { sev: a.severity, msg: a.message, at: Date.now() };
+          if (a.kind === "forecast") {
+            const ttb = $("ttb-" + a.signal);
+            const m = a.message.match(/~(\d+ min)/);
+            if (ttb && m) { ttb.textContent = "⚠ " + m[1]; ttb.classList.add("show"); }
+          }
+        }
+
+        // Derive each signal's current status; drive dots + banner from that.
+        let worst = { sev: "ok", name: null };
+        for (const name of Object.keys(charts)) {
+          const c = charts[name];
+          const st = deriveStatus(c.lastVal, c.lim);
+          setSignalState(name, st);
+          if (st !== "warning") {
+            const ttb = $("ttb-" + name); // hide the TTB badge once breached or back in control
+            if (ttb) ttb.classList.remove("show");
+          }
+          if (SEV_RANK[st] > SEV_RANK[worst.sev]) worst = { sev: st, name };
+        }
+
+        if (p.warmup_remaining > 0) {
+          setBanner("ok", `Calibrating control limits from in-control data… ${p.warmup_remaining} samples remaining.`);
+        } else if (worst.name === null) {
+          setBanner("ok", "All signals in control. No active rule violations.");
+        } else {
+          const am = latestAlertMsg[worst.name];
+          const fresh = am && Date.now() - am.at < 12000 && SEV_RANK[am.sev] >= SEV_RANK[worst.sev];
+          const c = charts[worst.name];
+          const fallback = `${worst.name[0].toUpperCase() + worst.name.slice(1)} outside control limits (value ${fmt(c.lastVal)} ${c.unit}).`;
+          setBanner(worst.sev, fresh ? am.msg : fallback);
+        }
+      }
+
+      // ---- WebSocket ----
+      function connect() {
+        const proto = location.protocol === "https:" ? "wss" : "ws";
+        const ws = new WebSocket(`${proto}://${location.host}/ws/telemetry`);
+
+        ws.onopen = () => { $("conn").textContent = "live"; $("led").className = "led on"; };
+        ws.onclose = () => {
+          $("conn").textContent = "reconnecting";
+          $("led").className = "led";
+          setTimeout(connect, 1500);
+        };
+        ws.onmessage = (ev) => {
+          const data = JSON.parse(ev.data);
+          if (data.type === "config") {
+            $("stat-rate").textContent = data.config.sample_rate_hz + " Hz";
+            buildCharts(data.config.signals);
+          } else {
+            handleMessage(data);
+          }
+        };
+      }
+
+      // ---- controls ----
+      async function inject(payload, label) {
+        try {
+          const r = await fetch("/api/inject", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (r.ok) showToast(label || `Injected ${payload.kind} on ${payload.signal}`);
+          else showToast("Inject rejected", "var(--red)");
+        } catch (e) { showToast("Inject failed", "var(--red)"); }
+      }
+
+      $("btn-inject").addEventListener("click", () => {
+        inject({
+          signal: $("f-signal").value,
+          kind: $("f-kind").value,
+          magnitude: parseFloat($("f-mag").value),
+          duration: parseInt($("f-dur").value, 10),
+        });
+      });
+
+      $("btn-reset").addEventListener("click", async () => {
+        await fetch("/api/reset", { method: "POST" });
+        for (const name of Object.keys(charts)) {
+          const c = charts[name];
+          c.drawn = false; c.xs = []; c.ys = []; c.lim = null; c.appliedRange = null;
+          Plotly.react(c.div, [{ x: [], y: [], mode: "lines", line: { color: c.accent, width: 1.8, shape: "spline" }, hoverinfo: "skip" }], plotLayout(c.accent), { displayModeBar: false, responsive: true });
+          setSignalState(name, "ok");
+          const ttb = $("ttb-" + name);
+          if (ttb) ttb.classList.remove("show");
+          delete latestAlertMsg[name];
+        }
+        $("log").innerHTML = '<div class="log-empty">No alerts yet — all signals in control.</div>';
+        showToast("Stream reset");
+      });
+
+      const PRESETS = [
+        { label: "Slow drift ↓", signal: 0, kind: "drift", magnitude: -6, duration: 120 },
+        { label: "Step shift ↑", signal: 1, kind: "step", magnitude: 4, duration: 100 },
+        { label: "Spike", signal: 2, kind: "spike", magnitude: 5, duration: 1 },
+      ];
+      function buildPresets(signals) {
+        const wrap = $("presets");
+        wrap.innerHTML = "";
+        PRESETS.forEach((p) => {
+          const sig = signals[p.signal] ? signals[p.signal].name : signals[0].name;
+          const b = document.createElement("button");
+          b.textContent = p.label;
+          b.addEventListener("click", () =>
+            inject({ signal: sig, kind: p.kind, magnitude: p.magnitude, duration: p.duration }, `${p.label} → ${sig}`)
+          );
+          wrap.appendChild(b);
+        });
+      }
+
+      // Build presets once config arrives (wrap buildCharts).
+      const _buildCharts = buildCharts;
+      buildCharts = (signals) => { _buildCharts(signals); buildPresets(signals); };
+
+      connect();
+      window.addEventListener("resize", () => {
+        for (const name of Object.keys(charts)) Plotly.Plots.resize(charts[name].div);
+      });
+    </script>
+    {% endverbatim %}
   </body>
 </html>

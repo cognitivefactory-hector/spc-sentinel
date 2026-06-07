@@ -3,12 +3,15 @@
 The in-memory channel layer means a single process serves the demo, so one shared
 Engine is the simplest correct design: the producer steps it, REST `inject`/`reset`
 mutate the same instance, and every connected client sees the result.
+
+Tunable via env (handy for deploy and for fast local/CI verification):
+  SPC_SAMPLE_RATE_HZ  samples per second (default 1.0)
+  SPC_WARMUP          in-control samples before limits/alerts (default 20)
 """
 
-from sentinel.engine import Engine
+import os
 
-# Snappier warm-up than the 60-sample default so a cold demo shows limits within ~30 s.
-_WARMUP = 30
+from sentinel.engine import Engine
 
 _engine: Engine | None = None
 
@@ -16,5 +19,8 @@ _engine: Engine | None = None
 def get_engine() -> Engine:
     global _engine
     if _engine is None:
-        _engine = Engine(warmup=_WARMUP, sample_rate_hz=1.0)
+        _engine = Engine(
+            warmup=int(os.environ.get("SPC_WARMUP", "20")),
+            sample_rate_hz=float(os.environ.get("SPC_SAMPLE_RATE_HZ", "1.0")),
+        )
     return _engine

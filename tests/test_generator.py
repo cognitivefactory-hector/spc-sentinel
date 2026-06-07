@@ -53,6 +53,16 @@ def test_injected_drift_has_expected_slope():
     assert diffs == [1.0, 1.0, 1.0, 1.0, 1.0]
 
 
+def test_injected_drift_holds_after_duration():
+    # The ramp completes at `duration`, then the offset is held (drift persists).
+    gen = quiet_gen()
+    gen.inject("q", kind="drift", magnitude=6.0, duration=6)
+    values = stream(gen, 9)
+    assert values[5] == pytest.approx(15.0)  # end of ramp: 10 + 6*5/6
+    assert values[6] == pytest.approx(16.0)  # held at baseline + magnitude
+    assert values[8] == pytest.approx(16.0)
+
+
 def test_injected_step_holds_then_expires():
     gen = quiet_gen()
     gen.inject("q", kind="step", magnitude=2.0, duration=3)

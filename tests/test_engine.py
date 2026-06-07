@@ -84,6 +84,29 @@ def test_injected_drift_produces_a_forecast_alert():
     assert seen_forecast
 
 
+def test_in_control_stream_does_not_spam_forecast_alerts():
+    # The trend-significance gate must keep noise-driven slopes from crying wolf.
+    engine = make_engine()
+    warm(engine)
+    forecast_alerts = 0
+    for _ in range(80):
+        forecast_alerts += sum(1 for a in engine.step()["alerts"] if a["kind"] == "forecast")
+    assert forecast_alerts == 0
+
+
+def test_sustained_violation_is_debounced_not_repeated_every_sample():
+    # A step shift parks the signal far beyond 3 sigma, which would otherwise fire a
+    # beyond_3sigma alarm on every single sample. Debounce collapses that to onset +
+    # occasional reminders. make_engine runs at 1 Hz, so the 8 s cooldown ~= 8 samples.
+    engine = make_engine()
+    warm(engine)
+    engine.inject("x", kind="step", magnitude=5.0, duration=200)
+    alarms = 0
+    for _ in range(40):
+        alarms += sum(1 for a in engine.step()["alerts"] if a["rule"] == "beyond_3sigma")
+    assert 1 <= alarms <= 6  # not 40
+
+
 def test_reset_restarts_warmup_and_stream():
     engine = make_engine()
     warm(engine)

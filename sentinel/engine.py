@@ -14,7 +14,7 @@ from collections import defaultdict
 
 from sentinel.alerts import forecast_alert, rule_alert
 from sentinel.sim.generator import DEFAULT_SIGNALS, Generator
-from sentinel.spc.forecast import forecast
+from sentinel.spc.forecast import DEFAULT_WINDOW, forecast
 from sentinel.spc.limits import ControlLimits, control_limits
 from sentinel.spc.rules import evaluate
 
@@ -28,6 +28,9 @@ class Engine:
         history: int = 200,
         sample_rate_hz: float = 1.0,
         breach_horizon_s: float = 1800.0,
+        forecast_window: int = DEFAULT_WINDOW,
+        trend_t: float = 3.0,
+        alert_cooldown_s: float = 8.0,
     ):
         self._seed = seed
         self._signals = tuple(signals)
@@ -35,6 +38,16 @@ class Engine:
         self.history_len = history
         self.sample_rate_hz = sample_rate_hz
         self.breach_horizon_s = breach_horizon_s
+        self.forecast_window = forecast_window
+        # A given (signal, rule) re-alerts at most once per cooldown, so a condition
+        # that persists for many samples fires once at onset instead of flooding the
+        # log every sample — real SPC alerting is edge-triggered, not continuous.
+        self.alert_cooldown_s = alert_cooldown_s
+        # A forecast alert fires only when the slope is at least this many standard
+        # errors from zero (a ~3-sigma significance test on the trend). This is the
+        # sensitivity knob that suppresses noise-driven false alarms — alert fatigue is
+        # the core risk this project is built around (DECISIONS.md / WHITEBOARD Q3).
+        self.trend_t = trend_t
         self.reset()
 
     def reset(self) -> None:
@@ -43,6 +56,7 @@ class Engine:
         )
         self._history: dict[str, list[float]] = defaultdict(list)
         self._limits: dict[str, ControlLimits] = {}
+        self._last_emit: dict[tuple[str, str], int] = {}
         self._t = 0
 
     def inject(self, signal: str, kind: str, magnitude: float, duration: int = 1) -> None:
@@ -89,6 +103,15 @@ class Engine:
                 for name, history in self._history.items()
             }
 
+    def _should_emit(self, key: tuple[str, str]) -> bool:
+        """Debounce: True at most once per cooldown window for a given alert key."""
+        cooldown = max(1, int(self.alert_cooldown_s * self.sample_rate_hz))
+        last = self._last_emit.get(key)
+        if last is None or (self._t - last) >= cooldown:
+            self._last_emit[key] = self._t
+            return True
+        return False
+
     def _evaluate(self, sample: dict) -> list:
         alerts = []
         for spec in self._signals:
@@ -98,13 +121,17 @@ class Engine:
             # A rule "fires now" only if its triggering index is the latest sample.
             current = len(history) - 1
             for violation in evaluate(history, limits):
-                if violation.index == current:
+                if violation.index == current and self._should_emit((spec.name, violation.rule)):
                     alerts.append(rule_alert(spec, violation.rule, sample[spec.name]))
 
-            fc = forecast(history, limits, sample_rate_hz=self.sample_rate_hz)
+            fc = forecast(
+                history, limits, window=self.forecast_window, sample_rate_hz=self.sample_rate_hz
+            )
             if (
-                fc.seconds_to_breach is not None
+                fc.slope_t >= self.trend_t
+                and fc.seconds_to_breach is not None
                 and 0 < fc.seconds_to_breach <= self.breach_horizon_s
+                and self._should_emit((spec.name, "forecast"))
             ):
                 alert = forecast_alert(spec, fc)
                 if alert is not None:

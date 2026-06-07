@@ -32,6 +32,26 @@ class Forecast:
     target_limit: float | None  # the limit being approached (UCL/LCL), or None if flat
     samples_to_breach: float | None  # >= 0, or None if not heading toward a limit
     seconds_to_breach: float | None
+    # |slope| / SE(slope): how many standard errors the trend is from zero. A
+    # significance gate on this is what separates a real drift from noise wander.
+    slope_t: float = 0.0
+
+
+def _slope_t_statistic(x, values, slope: float, intercept: float) -> float:
+    """Two-sided t-statistic for the regression slope (|slope| / standard error)."""
+    n = len(values)
+    if n <= 2:
+        return 0.0
+    residuals = np.asarray(values, dtype=float) - (slope * x + intercept)
+    sse = float(np.sum(residuals**2))
+    sxx = float(np.sum((x - x.mean()) ** 2))
+    if sxx == 0:
+        return 0.0
+    if sse == 0:
+        # A perfect fit with nonzero slope is maximally significant.
+        return float("inf") if abs(slope) > SLOPE_EPSILON else 0.0
+    se_slope = (sse / (n - 2)) ** 0.5 / sxx**0.5
+    return abs(slope) / se_slope
 
 
 def forecast(
@@ -52,6 +72,7 @@ def forecast(
     slope, intercept = np.polyfit(x, recent, 1)
     slope = float(slope)
     level = float(slope * (len(recent) - 1) + intercept)
+    slope_t = _slope_t_statistic(x, recent, slope, intercept)
 
     if slope > SLOPE_EPSILON:
         direction, target = "up", limits.ucl
@@ -65,6 +86,7 @@ def forecast(
             target_limit=None,
             samples_to_breach=None,
             seconds_to_breach=None,
+            slope_t=slope_t,
         )
 
     # Clamp to zero: a negative projection means the limit is already breached.
@@ -77,4 +99,5 @@ def forecast(
         target_limit=target,
         samples_to_breach=samples,
         seconds_to_breach=seconds,
+        slope_t=slope_t,
     )
