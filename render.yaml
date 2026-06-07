@@ -15,10 +15,11 @@ services:
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: DJANGO_ALLOWED_HOSTS
-        # Render's external hostname; add spc.hector-garza.com once DNS is pointed.
-        value: spc-sentinel.onrender.com,spc.hector-garza.com
+        # Leading-dot wildcard matches whatever *.onrender.com host Render assigns
+        # (the service name may get a suffix if not globally unique); plus the custom domain.
+        value: .onrender.com,spc.hector-garza.com
       - key: DJANGO_CSRF_TRUSTED_ORIGINS
-        value: https://spc-sentinel.onrender.com,https://spc.hector-garza.com
+        value: https://*.onrender.com,https://spc.hector-garza.com
       - key: SPC_SAMPLE_RATE_HZ
         value: "1"
       - key: SPC_WARMUP
