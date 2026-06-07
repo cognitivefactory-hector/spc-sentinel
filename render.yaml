@@ -1,0 +1,25 @@
+# Render blueprint — deploy with: Render Dashboard → New → Blueprint → this repo.
+# A single Docker web service; the in-memory channel layer needs exactly one
+# instance (no horizontal scaling), which is fine for a demo.
+services:
+  - type: web
+    name: spc-sentinel
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /
+    numInstances: 1
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "0"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        # Render's external hostname; add spc.hector-garza.com once DNS is pointed.
+        value: spc-sentinel.onrender.com,spc.hector-garza.com
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: https://spc-sentinel.onrender.com,https://spc.hector-garza.com
+      - key: SPC_SAMPLE_RATE_HZ
+        value: "1"
+      - key: SPC_WARMUP
+        value: "20"

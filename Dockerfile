@@ -11,7 +11,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Run as a non-root user.
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
+
+# Render (and most PaaS) inject $PORT; fall back to 8000 for local `docker run`.
+ENV PORT=8000
 EXPOSE 8000
 
-# Daphne is the ASGI server (Channels). Bind all interfaces for the container.
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
+# Shell form so ${PORT} expands. Daphne is the ASGI server (Channels).
+CMD daphne -b 0.0.0.0 -p ${PORT} config.asgi:application

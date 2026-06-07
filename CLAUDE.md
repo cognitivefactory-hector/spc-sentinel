@@ -4,7 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-This repo is a **docs-only scaffold**. There is no application code yet — only `SPEC.md`, `PLAN.md`, `DECISIONS.md`, `WHITEBOARD-DRILL.md`, `README.md`. The build follows `PLAN.md` milestones **M0 → M7**, each a thin vertical slice that stays runnable. When you add code, create the scaffolding described in M0 (`pyproject.toml`/`requirements.txt`, `Dockerfile`, `docker-compose.yml`, `manage.py`, `config/`, `sentinel/`) — none of it exists yet, so don't assume a command works before you've created it.
+A running Django + Channels app. `PLAN.md` milestones **M0–M6 are done** (scaffold, SPC engine, generator, forecaster, backend stream, dashboard UI, polish/deploy-prep); **M7** (Decision Record completion + recorded whiteboard) is the remaining differentiator. The build follows `PLAN.md` as thin vertical slices, each kept runnable.
+
+### Commands
+- `make run` (or `docker compose up --build`) — serve at http://localhost:8000
+- `pytest` — full suite; `pytest tests/test_rules.py -q` for one file
+- `ruff check .` and `ruff format --check .` — lint/format (CI runs both)
+- `python -m sentinel.sim.generator` — print a reproducible sample stream
+- Local venv: `python -m venv .venv && . .venv/bin/activate && pip install -r requirements-dev.txt`
+
+### Workflow conventions (this repo)
+- Each milestone is built on its own branch and merged via PR (`gh pr create`), not committed straight to `main`.
+- A commit-message hook **requires** a What / Why / Who / Where body — author messages from a file with `git commit -F`.
+- TDD the pure logic (`sentinel/spc/`, `sentinel/sim/`): write the test, watch it fail, then implement.
+- For UI changes, verify in a real browser (Playwright/Chrome DevTools MCP), not just tests — that's how the M5 alert-fatigue bugs were caught. Run with `SPC_SAMPLE_RATE_HZ=8 SPC_WARMUP=20` for fast verification.
 
 ## What this project really is (read before building)
 
